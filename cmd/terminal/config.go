@@ -54,6 +54,7 @@ var (
 )
 
 // Loads terminal settings from a configuration file.
+// Loads terminal settings from a configuration file.
 func LoadConfig(configPath, kariuki string) (*TerminalConfig, error) {
 	configOnce.Do(func() {
 		configInstance = &TerminalConfig{}
@@ -62,24 +63,24 @@ func LoadConfig(configPath, kariuki string) (*TerminalConfig, error) {
 		setDefaultConfig(v)
 		v.SetConfigType("yaml")
 
-		// Fonts - Config -
 		// Explicit configuration file (highest priority)
 		if configPath != "" {
 			v.SetConfigFile(configPath)
 		} else {
 			v.SetConfigName("pty-config")
-			// Path Search - Directory current
+			// Path Search - Current directory
 			v.AddConfigPath(".")
-			// es: ~/.config/<kariuki>
+			// e.g. ~/.config/<kariuki>
 			if userConfigDir, err := os.UserConfigDir(); err == nil {
 				appConfigDir := filepath.Join(userConfigDir, kariuki)
 				v.AddConfigPath(appConfigDir)
 			}
-			v.AddConfigPath("/etc/" + kariuki) // Config Global
+			v.AddConfigPath("/etc/" + kariuki) // Global config
 		}
+
 		// Config System
 		v.SetEnvPrefix("PTY") // PTY_ prefix for all variables
-		v.AutomaticEnv()      // Bind automatically all environment variables
+		v.AutomaticEnv()      // Bind all environment variables automatically
 
 		v.BindEnv("bg_color", "PTY_BACKGROUND_COLOR")
 		v.BindEnv("text_color", "PTY_TEXT_COLOR")
@@ -87,26 +88,45 @@ func LoadConfig(configPath, kariuki string) (*TerminalConfig, error) {
 
 		// Load and error handling
 		if err := v.ReadInConfig(); err != nil {
-			// Check if the error is just "file not found".
+			// Check if the error is just "file not found"
 			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 				fmt.Println("Config: Using default settings (file not found)")
 			} else {
-				// If it's another error (e.g., invalid YAML syntax), store the error.
 				configErr = fmt.Errorf("error reading configuration file: %w", err)
 				return
 			}
 		}
 
-		// Deserialize to struct
-		configErr = v.UnmarshalExact(&configInstance, viper.DecoderConfigOption(
-			func(c *mapstructure.DecoderConfig) {
-				c.DecodeHook = mapstructure.ComposeDecodeHookFunc(
-					mapstructure.StringToTimeDurationHookFunc(),
-					mapstructure.StringToSliceHookFunc(","),
-				)
-			},
-		))
-		if configErr != nil {
+		// Create a custom decoder
+		decoderConfig := &mapstructure.DecoderConfig{
+			Result: configInstance,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructure.StringToTimeDurationHookFunc(),
+				mapstructure.StringToSliceHookFunc(","),
+			),
+			// We'll handle unused keys manually
+			ErrorUnused: false,
+		}
+
+		decoder, err := mapstructure.NewDecoder(decoderConfig)
+		if err != nil {
+			configErr = fmt.Errorf("failed to create config decoder: %w", err)
+			return
+		}
+
+		// Get all settings and handle legacy keys
+		settings := v.AllSettings()
+		handleLegacyKeys(settings)
+
+		// Decode using custom decoder
+		if err := decoder.Decode(settings); err != nil {
+			configErr = fmt.Errorf("failed to decode config: %w", err)
+			return
+		}
+
+		// Validate configuration keys
+		if err := validateConfigKeys(v, settings); err != nil {
+			configErr = err
 			return
 		}
 
@@ -130,7 +150,7 @@ func setDefaultConfig(v *viper.Viper) {
 	v.SetDefault("text_color", "white")
 	v.SetDefault("cursor_style", "block")
 	v.SetDefault("cursor_blink", true)
-	v.SetDefault("welcome_msg", "Welcome to the Kariuki!")
+	v.SetDefault("welcome_message", "Welcome to the Kariuki!")
 	v.SetDefault("font", "Monospace")
 
 	v.SetDefault("history_size", 1000)
@@ -148,7 +168,7 @@ func setDefaultConfig(v *viper.Viper) {
 	v.SetDefault("rows", 24)
 	v.SetDefault("cols", 80)
 	v.SetDefault("scroll_buffer", 1000)
-	v.SetDefault("enconding", "UTF-8")
+	v.SetDefault("encoding", "UTF-8")
 	v.SetDefault("bell_sound", "system")
 	v.SetDefault("enable_mouse", true)
 }
@@ -175,7 +195,6 @@ func watchConfigFile(configPath, kariuki string) {
 		select {
 		case event, ok := <-watcher.Events:
 			if !ok {
-				// Close channel and goruntine stop
 				return
 			}
 			if event.Name == configPath && event.Op&fsnotify.Write == fsnotify.Write {
@@ -315,4 +334,74 @@ func ReloadConfig(configPath, kariuki string) error {
 
 	_, err := LoadConfig(configPath, kariuki)
 	return err
+}
+
+// Handle legacy keys by mapping them to new keys
+func handleLegacyKeys(settings map[string]interface{}) {
+	// Handle enconding -> encoding
+	if val, ok := settings["enconding"]; ok {
+		if _, exists := settings["encoding"]; !exists {
+			settings["encoding"] = val
+		}
+		delete(settings, "enconding")
+	}
+
+	// Handle welcome_msg -> welcome_message
+	if val, ok := settings["welcome_msg"]; ok {
+		if _, exists := settings["welcome_message"]; !exists {
+			settings["welcome_message"] = val
+		}
+		delete(settings, "welcome_msg")
+	}
+}
+
+// Validate configuration keys against struct tags
+func validateConfigKeys(v *viper.Viper, settings map[string]interface{}) error {
+	validKeys := getValidKeysForStruct(reflect.TypeOf(TerminalConfig{}))
+
+	var invalidKeys []string
+	for key := range settings {
+		if _, valid := validKeys[key]; !valid && key != "" {
+			invalidKeys = append(invalidKeys, key)
+		}
+	}
+
+	if len(invalidKeys) > 0 {
+		return fmt.Errorf("decoding failed due to the following error(s):\n\n'%s' has invalid keys: %s",
+			v.ConfigFileUsed(), strings.Join(invalidKeys, ", "))
+	}
+	return nil
+}
+
+// Get valid mapstructure keys from struct tags
+func getValidKeysForStruct(t reflect.Type) map[string]bool {
+	validKeys := make(map[string]bool)
+
+	// Handle struct and pointer types
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	if t.Kind() != reflect.Struct {
+		return validKeys
+	}
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		tag := field.Tag.Get("mapstructure")
+
+		// Skip fields without mapstructure tag
+		if tag == "" || tag == "-" {
+			continue
+		}
+
+		// Handle comma-separated options (e.g. "field,omitempty")
+		if commaIdx := strings.Index(tag, ","); commaIdx != -1 {
+			tag = tag[:commaIdx]
+		}
+
+		validKeys[tag] = true
+	}
+
+	return validKeys
 }
