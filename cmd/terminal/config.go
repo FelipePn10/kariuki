@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
@@ -47,41 +48,19 @@ type TerminalConfig struct {
 
 var (
 	configInstance *TerminalConfig // Instance of TerminalConfig
-	configOnce     sync.Once       // Ensures a single boot
+	configMutex    sync.RWMutex
 	configErr      error
+	configOnce     sync.Once // Ensures a single boot
 )
 
 // Loads terminal settings from a configuration file.
 func LoadConfig(configPath, kariuki string) (*TerminalConfig, error) {
 	configOnce.Do(func() {
+		configInstance = &TerminalConfig{}
 		v := viper.New()
 
-		v.SetDefault("prompt", "> ")
-		v.SetDefault("bg_color", "black")
-		v.SetDefault("text_color", "white")
-		v.SetDefault("cursor_style", "block")
-		v.SetDefault("cursor_blink", true)
-		v.SetDefault("welcome_msg", "Welcome to the Kariuki!")
-		v.SetDefault("font", "Monospace")
-
-		v.SetDefault("history_size", 1000)
-		v.SetDefault("history_file", ".pty_history")
-		v.SetDefault("type_ahead", true)
-		v.SetDefault("auto_suggest", true)
-		v.SetDefault("inactivity_close", time.Hour)
-
-		v.SetDefault("max_session_time", 8*time.Hour)
-		v.SetDefault("allowed_commands", []string{})
-		v.SetDefault("blocked_commands", []string{"rm -rf /", "dd if=/dev/random"})
-
-		v.SetDefault("enable_logging", false)
-
-		v.SetDefault("rows", 24)
-		v.SetDefault("cols", 80)
-		v.SetDefault("scroll_buffer", 1000)
-		v.SetDefault("enconding", "UTF-8")
-		v.SetDefault("bell_sound", "system")
-		v.SetDefault("enable_mouse", true)
+		setDefaultConfig(v)
+		v.SetConfigType("yaml")
 
 		// Fonts - Config -
 		// Explicit configuration file (highest priority)
@@ -96,70 +75,180 @@ func LoadConfig(configPath, kariuki string) (*TerminalConfig, error) {
 				appConfigDir := filepath.Join(userConfigDir, kariuki)
 				v.AddConfigPath(appConfigDir)
 			}
-			// Config System
-			v.AddConfigPath("/etc/" + kariuki)
+			v.AddConfigPath("/etc/" + kariuki) // Config Global
+		}
+		// Config System
+		v.SetEnvPrefix("PTY") // PTY_ prefix for all variables
+		v.AutomaticEnv()      // Bind automatically all environment variables
 
-			v.SetEnvPrefix("PTY") // PTY_ prefix for all variables
-			v.AutomaticEnv()      // Bind automatically all environment variables
+		v.BindEnv("bg_color", "PTY_BACKGROUND_COLOR")
+		v.BindEnv("text_color", "PTY_TEXT_COLOR")
+		v.BindEnv("inactivity_close", "PTY_SESSION_TIMEOUT")
 
-			v.BindEnv("bg_color", "PTY_BACKGROUND_COLOR")
-			v.BindEnv("text_color", "PTY_TEXT_COLOR")
-			v.BindEnv("inactivity_close", "PTY_SESSION_TIMEOUT")
-
-			// Load and error handling
-			if err := v.ReadInConfig(); err != nil {
-				switch err.(type) {
-				case viper.ConfigFileNotFoundError:
-					fmt.Printf("Config: Using defaults (file not found)\n")
-				default:
-					configErr = fmt.Errorf("Error config file: %w", err)
-					return
-				}
+		// Load and error handling
+		if err := v.ReadInConfig(); err != nil {
+			// Check if the error is just "file not found".
+			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+				fmt.Println("Config: Using default settings (file not found)")
+			} else {
+				// If it's another error (e.g., invalid YAML syntax), store the error.
+				configErr = fmt.Errorf("error reading configuration file: %w", err)
+				return
 			}
+		}
 
-			// Deserialise to struct
-			configErr = v.UnmarshalExact(&configInstance,
-				viper.DecodeHook(
-					StringToTimeDurationHookFunc(),
-					StringToSliceHookFunc(","), // String -> Slices
-				),
-			)
+		// Deserialize to struct
+		configErr = v.UnmarshalExact(&configInstance, viper.DecoderConfigOption(
+			func(c *mapstructure.DecoderConfig) {
+				c.DecodeHook = mapstructure.ComposeDecodeHookFunc(
+					mapstructure.StringToTimeDurationHookFunc(),
+					mapstructure.StringToSliceHookFunc(","),
+				)
+			},
+		))
+		if configErr != nil {
+			return
+		}
 
-			if configErr == nil {
-				configInstance.postProcessConfig()
-			}
+		// Process settings
+		configMutex.Lock()
+		configInstance.postProcessConfig()
+		configMutex.Unlock()
+
+		// Start monitoring file changes
+		if configPath != "" {
+			go watchConfigFile(configPath, kariuki)
 		}
 	})
 	return configInstance, configErr
 }
 
-// Function and Hooks
-// String -> Time.Duration
-func StringToTimeDurationHookFunc() viper.DecoderConfigOption {
-	return func(c *mapstructure.DecoderConfig) {
-		c.DecodeHook = mapstructure.ComposeDecodeHookFunc(
-			c.DecodeHook,
-			mapstructure.StringToTimeDurationHookFunc(),
-		)
+// setDefaultConfig sets the default values for all configurations
+func setDefaultConfig(v *viper.Viper) {
+	v.SetDefault("prompt", "> ")
+	v.SetDefault("bg_color", "black")
+	v.SetDefault("text_color", "white")
+	v.SetDefault("cursor_style", "block")
+	v.SetDefault("cursor_blink", true)
+	v.SetDefault("welcome_msg", "Welcome to the Kariuki!")
+	v.SetDefault("font", "Monospace")
+
+	v.SetDefault("history_size", 1000)
+	v.SetDefault("history_file", ".pty_history")
+	v.SetDefault("type_ahead", true)
+	v.SetDefault("auto_suggest", true)
+	v.SetDefault("inactivity_close", time.Hour)
+
+	v.SetDefault("max_session_time", 8*time.Hour)
+	v.SetDefault("allowed_commands", []string{})
+	v.SetDefault("blocked_commands", []string{"rm -rf /", "dd if=/dev/random"})
+
+	v.SetDefault("enable_logging", false)
+
+	v.SetDefault("rows", 24)
+	v.SetDefault("cols", 80)
+	v.SetDefault("scroll_buffer", 1000)
+	v.SetDefault("enconding", "UTF-8")
+	v.SetDefault("bell_sound", "system")
+	v.SetDefault("enable_mouse", true)
+}
+
+// watchConfigFile monitors configuration file changes
+func watchConfigFile(configPath, kariuki string) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		fmt.Printf("Error creating configuration watcher: %v\n", err)
+		return
+	}
+	defer watcher.Close()
+
+	dir := filepath.Dir(configPath)
+	if err := watcher.Add(dir); err != nil {
+		fmt.Printf("Error adding directory to watcher: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Watching directory: %s\n", configPath)
+
+	// Process watcher events.
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				// Close channel and goruntine stop
+				return
+			}
+			if event.Name == configPath && event.Op&fsnotify.Write == fsnotify.Write {
+				fmt.Println("Configuration file changed, reloading...")
+				if err := ReloadConfig(configPath, kariuki); err != nil {
+					fmt.Printf("Error reloading configuration: %v\n", err)
+				} else {
+					fmt.Println("Configuration reloaded successfully")
+				}
+			}
+		// If an error occurs in the watcher
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				// Close channel and goruntine stop
+				return
+			}
+			fmt.Printf("Error watching configuration file: %v\n", err)
+		}
 	}
 }
 
+//----------------------------------------------------------------------------//
+//Deserialise to struct :
+//
+// 			configErr = v.UnmarshalExact(&configInstance, viper.DecoderConfigOption(
+// 				func(c *mapstructure.DecoderConfig) {
+// 					c.DecodeHook = mapstructure.ComposeDecodeHookFunc(
+// 						mapstructure.StringToTimeDurationHookFunc(),
+// 						func(f reflect.Kind, t reflect.Kind, data interface{}) (interface{}, error) {
+// 							if f != reflect.String || t != reflect.Slice {
+// 								return data, nil
+// 							}
+// 							str := data.(string)
+// 							if str == "" {
+// 								return []string{}, nil
+// 							}
+// 							return strings.Split(str, ","), nil
+// 						},
+// 					)
+// 				},
+// 			))
+
+// 			if configErr == nil {
+// 				configInstance.postProcessConfig()
+// 			}
+// 		}
+// 	})
+// 	return configInstance, configErr
+// }
+//
+//----------------------------------------------------------------------------//
+
+// Function and Hooks
+// String -> Time.Duration
+func StringToTimeDurationHookFunc() mapstructure.DecodeHookFunc {
+	return mapstructure.StringToTimeDurationHookFunc()
+}
+
 // String delimiters -> Slices
-func StringToSliceHookFunc(delimiter string) viper.DecoderConfigOption {
-	return func(c *mapstructure.DecoderConfig) {
-		c.DecodeHook = mapstructure.ComposeDecodeHookFunc(
-			c.DecodeHook,
-			func(f reflect.Kind, t reflect.Kind, data interface{}) (interface{}, error) {
-				if f != reflect.String || t != reflect.Slice {
-					return data, nil
-				}
-				str := data.(string)
-				if str == "" {
-					return []string{}, nil
-				}
-				return strings.Split(str, delimiter), nil
-			},
-		)
+func StringToSliceHookFunc(delimiter string) mapstructure.DecodeHookFunc {
+	return func(f reflect.Kind, t reflect.Kind, data interface{}) (interface{}, error) {
+		// Check if the source is a string and the destination is a slice.
+		if f != reflect.String || t != reflect.Slice {
+			return data, nil
+		}
+		// Convert the data to a string.
+		str, ok := data.(string)
+		if !ok || str == "" {
+			// If not a string or empty, return an empty slice.
+			return []string{}, nil
+		}
+		// Split the string by the delimiter and return the slice.
+		return strings.Split(str, delimiter), nil
 	}
 }
 
@@ -171,39 +260,59 @@ func (c *TerminalConfig) postProcessConfig() {
 	if c.Rows < 10 {
 		c.Rows = 10
 	}
-
 	if c.Cols < 40 {
 		c.Cols = 40
 	}
 
-	// Expand relative paths for history
+	// Ex.: ".kariuki_history" -> "/home/user/.kariuki_history".
 	if c.HistoryFile != "" && !filepath.IsAbs(c.HistoryFile) {
 		if home, err := os.UserHomeDir(); err == nil {
 			c.HistoryFile = filepath.Join(home, c.HistoryFile)
 		}
 	}
 
-	// Normalize colors to lower-case
 	c.BgColor = strings.ToLower(c.BgColor)
 	c.TextColor = strings.ToLower(c.TextColor)
 
-	// Config Security: Blocked AllowedCommands
 	if len(c.BlockedCommands) == 0 {
-		c.BlockedCommands = []string{"rm -rf", "mkfs", "dd if="}
+		c.BlockedCommands = []string{
+			"rm -rf /",
+			"mkfs",
+			"dd if=/dev/random",
+		}
+	}
+
+	// "block", "underline" or "bar" are allowed.
+	validCursors := []string{"block", "underline", "bar"}
+	found := false
+	for _, vc := range validCursors {
+		if c.CursorStyle == vc {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.CursorStyle = "block"
 	}
 }
 
-// GetConfig returns the loaded configuration instance
-// (Concurrency-safe after initialization)
 func GetConfig() (*TerminalConfig, error) {
+	configMutex.RLock()
+	defer configMutex.RUnlock()
+
 	if configInstance == nil {
-		panic("Config instance not initialized. Call InitConfig() first.")
+		return nil, fmt.Errorf("configuration not initialized. Call LoadConfig first")
 	}
-	return configInstance, nil
+	return configInstance, configErr
 }
 
 func ReloadConfig(configPath, kariuki string) error {
-	configOnce = sync.Once{} // Reset singleton
+	configMutex.Lock()
+	defer configMutex.Unlock()
+
+	configOnce = sync.Once{}
+	configInstance = nil
+
 	_, err := LoadConfig(configPath, kariuki)
 	return err
 }
