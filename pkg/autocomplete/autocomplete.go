@@ -103,7 +103,7 @@ func getItemName(item readline.PrefixCompleterInterface) string {
 	return nameField.String()
 }
 
-func listFiles(path string) func(string) []string {
+func (a *AutoComplete) listFiles(path string) func(string) []string {
 	return func(line string) []string {
 		resolvedPath := path
 		if !filepath.IsAbs(path) {
@@ -114,7 +114,7 @@ func listFiles(path string) func(string) []string {
 		names := make([]string, 0)
 		files, err := os.ReadDir(resolvedPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Erro ao ler diretório %s: %v\n", resolvedPath, err)
+			fmt.Fprintf(os.Stderr, "Error reading directory %s: %v\n", resolvedPath, err)
 			return names
 		}
 
@@ -169,7 +169,7 @@ func (a *AutoComplete) Input(prompt string) (string, error) {
 		FuncFilterInputRune: nil,
 	})
 	if err != nil {
-		return "", fmt.Errorf("falha ao inicializar readline: %w", err)
+		return "", fmt.Errorf("failed to initialize readline: %w", err)
 	}
 	defer rl.Close()
 
@@ -185,7 +185,7 @@ func (a *AutoComplete) Input(prompt string) (string, error) {
 func FallbackInput(prompt string) (string, error) {
 	path, err := input_autocomplete.Read(prompt)
 	if err != nil {
-		return "", fmt.Errorf("falha ao ler entrada de caminho: %w", err)
+		return "", fmt.Errorf("failed to read path entry: %w", err)
 	}
 	return path, nil
 }
