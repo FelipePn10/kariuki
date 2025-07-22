@@ -1,7 +1,9 @@
 package autocomplete
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,7 +17,10 @@ import (
 type AutoComplete struct {
 	completer      *readline.PrefixCompleter
 	history        []string
-	config         *terminal.TerminalConfig // Terminal configuration for allowed commands and aliases.
+	historyPath    string
+	startIndex     int
+	size           int
+	config         *terminal.TerminalConfig // Terminal configuration
 	maxHistorySize int
 }
 
@@ -133,12 +138,67 @@ func (a *AutoComplete) AddToHistory(command string) {
 		return
 	}
 
-	a.history = append(a.history, command)
-	if len(a.history) > a.maxHistorySize {
-		a.history = a.history[1:]
+	if a.size > 0 && a.history[(a.startIndex+a.size-1)%a.maxHistorySize] == command {
+		return
 	}
 
+	if a.size < a.maxHistorySize {
+		a.history = append(a.history, command)
+		a.size++
+	} else {
+		a.history[a.startIndex] = command
+		a.startIndex = (a.startIndex + 1) % a.maxHistorySize
+	}
+
+	a.saveHistoryToDisk()
 	a.completer = a.buildCompleter()
+}
+
+func (a *AutoComplete) saveHistoryToDisk() {
+	if a.historyPath == "" {
+		return
+	}
+
+	fullHistory := make([]string, 0, a.size)
+	for i := 0; i < a.size; i++ {
+		index := (a.startIndex + i) % a.maxHistorySize
+		fullHistory = append(fullHistory, a.history[index])
+	}
+
+	data, err := json.MarshalIndent(fullHistory, "", "  ")
+	if err != nil {
+		log.Printf("Error serializing history: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(a.historyPath, data, 0644); err != nil {
+		log.Printf("Error writing history file: %v", err)
+	}
+}
+
+func (a *AutoComplete) loadHistoryFromDisk() {
+	if a.historyPath == "" {
+		return
+	}
+
+	data, err := os.ReadFile(a.historyPath)
+	if err != nil {
+		log.Printf("No existing history file found: %v", err)
+		return
+	}
+
+	var loaded []string
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		log.Printf("Error loading history: %v", err)
+		return
+	}
+
+	a.history = make([]string, a.maxHistorySize)
+	copy(a.history, loaded)
+	a.size = len(loaded)
+	if a.size > a.maxHistorySize {
+		a.size = a.maxHistorySize
+	}
 }
 
 func (a *AutoComplete) SuggestHistory(input string) []string {
