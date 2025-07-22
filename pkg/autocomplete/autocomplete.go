@@ -12,9 +12,6 @@ import (
 	"github.com/chzyer/readline"
 )
 
-// A useful input that can autocomplete users path to directories or files when tab key is pressed.
-// The purpose is to be similar to bash/cmd native autocompletion.
-
 type AutoComplete struct {
 	completer      *readline.PrefixCompleter
 	history        []string
@@ -103,6 +100,7 @@ func getItemName(item readline.PrefixCompleterInterface) string {
 	return nameField.String()
 }
 
+// List files in a directory
 func (a *AutoComplete) listFiles(path string) func(string) []string {
 	return func(line string) []string {
 		resolvedPath := path
@@ -111,7 +109,7 @@ func (a *AutoComplete) listFiles(path string) func(string) []string {
 				resolvedPath = filepath.Join(cwd, path)
 			}
 		}
-		names := make([]string, 0)
+		names := make([]string, 0) // Array to store file names
 		files, err := os.ReadDir(resolvedPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading directory %s: %v\n", resolvedPath, err)
