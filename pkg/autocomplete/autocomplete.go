@@ -1,7 +1,6 @@
 package autocomplete
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -27,9 +26,13 @@ type AutoComplete struct {
 func NewAutocomplete(config *terminal.TerminalConfig) *AutoComplete {
 	a := &AutoComplete{
 		config:         config,
+		historyPath:    config.HistoryFile,
 		history:        make([]string, 0, config.HistorySize),
 		maxHistorySize: config.HistorySize,
+		startIndex:     0,
+		size:           0,
 	}
+	a.loadHistoryFromDisk()
 	a.completer = a.buildCompleter()
 	return a
 }
@@ -71,6 +74,18 @@ func (a *AutoComplete) buildCompleter() *readline.PrefixCompleter {
 		),
 		readline.PcItem("sleep"),
 	}
+
+	// Add dynamic history suggestions
+	items = append(items, readline.PcItemDynamic(func(line string) []string {
+		suggestions := make([]string, 0)
+		lineLower := strings.ToLower(line)
+		for _, cmd := range a.history {
+			if strings.HasPrefix(strings.ToLower(cmd), lineLower) {
+				suggestions = append(suggestions, cmd)
+			}
+		}
+		return suggestions
+	}))
 
 	// Add allowed commands from terminal configuration, if available.
 	if a.config != nil && len(a.config.AllowedCommands) > 0 {
@@ -138,7 +153,8 @@ func (a *AutoComplete) AddToHistory(command string) {
 		return
 	}
 
-	if a.size > 0 && a.history[(a.startIndex+a.size-1)%a.maxHistorySize] == command {
+	// avoid saving consecutive duplicate commands in history
+	if a.size > 0 && a.history[(a.startIndex+a.size-1)%len(a.history)] == command {
 		return
 	}
 
@@ -148,31 +164,6 @@ func (a *AutoComplete) AddToHistory(command string) {
 	} else {
 		a.history[a.startIndex] = command
 		a.startIndex = (a.startIndex + 1) % a.maxHistorySize
-	}
-
-	a.saveHistoryToDisk()
-	a.completer = a.buildCompleter()
-}
-
-func (a *AutoComplete) saveHistoryToDisk() {
-	if a.historyPath == "" {
-		return
-	}
-
-	fullHistory := make([]string, 0, a.size)
-	for i := 0; i < a.size; i++ {
-		index := (a.startIndex + i) % a.maxHistorySize
-		fullHistory = append(fullHistory, a.history[index])
-	}
-
-	data, err := json.MarshalIndent(fullHistory, "", "  ")
-	if err != nil {
-		log.Printf("Error serializing history: %v", err)
-		return
-	}
-
-	if err := os.WriteFile(a.historyPath, data, 0644); err != nil {
-		log.Printf("Error writing history file: %v", err)
 	}
 }
 
@@ -187,18 +178,21 @@ func (a *AutoComplete) loadHistoryFromDisk() {
 		return
 	}
 
-	var loaded []string
-	if err := json.Unmarshal(data, &loaded); err != nil {
-		log.Printf("Error loading history: %v", err)
-		return
+	lines := strings.Split(string(data), "\n")
+	var history []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			history = append(history, trimmed)
+		}
 	}
-
-	a.history = make([]string, a.maxHistorySize)
-	copy(a.history, loaded)
-	a.size = len(loaded)
-	if a.size > a.maxHistorySize {
-		a.size = a.maxHistorySize
+	// Take the last a.maxHistorySize commands
+	if len(history) > a.maxHistorySize {
+		history = history[len(history)-a.maxHistorySize:]
 	}
+	a.history = history
+	a.size = len(history)
+	a.startIndex = 0
 }
 
 func (a *AutoComplete) SuggestHistory(input string) []string {
