@@ -75,7 +75,7 @@ func (a *AutoComplete) buildCompleter() *readline.PrefixCompleter {
 		readline.PcItem("sleep"),
 	}
 
-	// Add dynamic history suggestions
+	// dynamic history suggestions
 	items = append(items, readline.PcItemDynamic(func(line string) []string {
 		suggestions := make([]string, 0)
 		lineLower := strings.ToLower(line)
@@ -101,13 +101,16 @@ func (a *AutoComplete) buildCompleter() *readline.PrefixCompleter {
 
 func containsCommand(items []readline.PrefixCompleterInterface, cmd string) bool {
 	for _, item := range items {
-		if name := getItemName(item); name == cmd {
-			return true
+		if pc, ok := item.(*readline.PrefixCompleter); ok {
+			if string(pc.Name) == cmd {
+				return true
+			}
 		}
 	}
 	return false
 }
 
+// Future -> Implement interface like this by removing the reflect
 func getItemName(item readline.PrefixCompleterInterface) string {
 	v := reflect.ValueOf(item).Elem()
 	if v.Kind() != reflect.Struct {
@@ -172,12 +175,14 @@ func (a *AutoComplete) loadHistoryFromDisk() {
 		return
 	}
 
+	// data in bytes
 	data, err := os.ReadFile(a.historyPath)
 	if err != nil {
 		log.Printf("No existing history file found: %v", err)
 		return
 	}
 
+	// data in bytes -> data in strings
 	lines := strings.Split(string(data), "\n")
 	var history []string
 	for _, line := range lines {
