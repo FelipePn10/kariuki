@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 
 	"github.com/FelipePn10/kariuki/cmd/terminal"
@@ -110,19 +109,6 @@ func containsCommand(items []readline.PrefixCompleterInterface, cmd string) bool
 	return false
 }
 
-// Future -> Implement interface like this by removing the reflect
-func getItemName(item readline.PrefixCompleterInterface) string {
-	v := reflect.ValueOf(item).Elem()
-	if v.Kind() != reflect.Struct {
-		return ""
-	}
-	nameField := v.FieldByName("Name")
-	if !nameField.IsValid() {
-		return ""
-	}
-	return nameField.String()
-}
-
 // List files in a directory
 func (a *AutoComplete) listFiles(path string) func(string) []string {
 	return func(line string) []string {
@@ -157,8 +143,11 @@ func (a *AutoComplete) AddToHistory(command string) {
 	}
 
 	// avoid saving consecutive duplicate commands in history
-	if a.size > 0 && a.history[(a.startIndex+a.size-1)%len(a.history)] == command {
-		return
+	if a.size > 0 {
+		lastIndex := (a.startIndex + a.size - 1) % len(a.history)
+		if a.history[lastIndex] == command {
+			return
+		}
 	}
 
 	if a.size < a.maxHistorySize {
