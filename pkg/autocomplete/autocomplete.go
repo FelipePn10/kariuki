@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/FelipePn10/kariuki/cmd/terminal"
-	input_autocomplete "github.com/JoaoDanielRufino/go-input-autocomplete"
 	"github.com/chzyer/readline"
 )
 
@@ -204,42 +203,42 @@ func (a *AutoComplete) SuggestHistory(input string) []string {
 	return suggestions
 }
 
-func (a *AutoComplete) Input(prompt string) (string, error) {
-	rl, err := readline.NewEx(&readline.Config{
-		Prompt:              prompt,
-		AutoComplete:        a.completer,
-		HistoryFile:         a.config.HistoryFile,
-		InterruptPrompt:     "^C",
-		EOFPrompt:           "exit",
-		HistorySearchFold:   true,
-		FuncFilterInputRune: nil,
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to initialize readline: %w", err)
-	}
-	defer rl.Close()
+// func (a *AutoComplete) Input(prompt string) (string, error) {
+// 	rl, err := readline.NewEx(&readline.Config{
+// 		Prompt:              prompt,
+// 		AutoComplete:        a.completer,
+// 		HistoryFile:         a.config.HistoryFile,
+// 		InterruptPrompt:     "^C",
+// 		EOFPrompt:           "exit",
+// 		HistorySearchFold:   true,
+// 		FuncFilterInputRune: nil,
+// 	})
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to initialize readline: %w", err)
+// 	}
+// 	defer rl.Close()
 
-	line, err := rl.Readline()
-	if err != nil {
-		return "", err
-	}
+// 	line, err := rl.Readline()
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	a.AddToHistory(line)
-	return line, nil
-}
+// 	a.AddToHistory(line)
+// 	return line, nil
+// }
 
-func FallbackInput(prompt string) (string, error) {
-	path, err := input_autocomplete.Read(prompt)
-	if err != nil {
-		return "", fmt.Errorf("failed to read path entry: %w", err)
-	}
-	return path, nil
-}
+// func FallbackInput(prompt string) (string, error) {
+// 	path, err := input_autocomplete.Read(prompt)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to read path entry: %w", err)
+// 	}
+// 	return path, nil
+// }
 
-func InputAutocomplete() {
-	path, err := input_autocomplete.Read("Path: ")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(path)
-}
+// func InputAutocomplete() {
+// 	path, err := input_autocomplete.Read("Path: ")
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	fmt.Println(path)
+// }
