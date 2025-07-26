@@ -158,6 +158,24 @@ func (a *AutoComplete) AddToHistory(command string) {
 	}
 }
 
+func (a *AutoComplete) SaveHistoryToDisk() error {
+	if a.historyPath == "" {
+		return nil
+	}
+	var orderedHistory []string
+	if a.size < a.maxHistorySize {
+		orderedHistory = a.history
+	} else {
+		orderedHistory = append(a.history[a.startIndex:], a.history[0:a.startIndex]...)
+	}
+	content := strings.Join(orderedHistory, "\n")
+	err := os.WriteFile(a.historyPath, []byte(content), 0644)
+	if err != nil {
+		log.Printf("Failed to save history to %s: %v", a.historyPath, err)
+	}
+	return err
+}
+
 func (a *AutoComplete) loadHistoryFromDisk() {
 	if a.historyPath == "" {
 		return
