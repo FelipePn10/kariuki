@@ -1,0 +1,21 @@
+goos: linux
+goarch: amd64
+pkg: github.com/FelipePn10/kariuki/pkg/autocomplete
+cpu: AMD Ryzen 5 4600G with Radeon Graphics
+BenchmarkAddToHistory-12               	100000000	        10.84 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAddToHistory-12               	124394702	         9.614 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAddToHistory-12               	120181915	         9.638 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAddToHistory-12               	121825344	         9.930 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAddToHistory-12               	120930348	         9.674 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAddToHistory_FullBuffer-12    	16086998	        72.72 ns/op	      24 B/op	       1 allocs/op
+BenchmarkAddToHistory_FullBuffer-12    	16015831	        72.82 ns/op	      24 B/op	       1 allocs/op
+BenchmarkAddToHistory_FullBuffer-12    	16130751	        74.27 ns/op	      24 B/op	       1 allocs/op
+BenchmarkAddToHistory_FullBuffer-12    	16091145	        73.73 ns/op	      24 B/op	       1 allocs/op
+BenchmarkAddToHistory_FullBuffer-12    	14990143	        74.83 ns/op	      24 B/op	       1 allocs/op
+BenchmarkSuggestHistory-12             	   15093	     80733 ns/op	   72977 B/op	     996 allocs/op
+BenchmarkSuggestHistory-12             	   15274	     82214 ns/op	   72977 B/op	     996 allocs/op
+BenchmarkSuggestHistory-12             	   15151	     79963 ns/op	   72977 B/op	     996 allocs/op
+BenchmarkSuggestHistory-12             	   14907	     79581 ns/op	   72977 B/op	     996 allocs/op
+BenchmarkSuggestHistory-12             	   15032	     79140 ns/op	   72977 B/op	     996 allocs/op
+PASS
+ok  	github.com/FelipePn10/kariuki/pkg/autocomplete	26.136s
