@@ -11,6 +11,13 @@
 # Test binary, built with `go test -c`
 *.test
 
+/benchmark_results/
+*.prof
+*_benchmark.txt
+*_profile_output.txt
+baseline_results.txt
+
+
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
