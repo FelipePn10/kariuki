@@ -1,0 +1,69 @@
+goos: linux
+goarch: amd64
+pkg: github.com/FelipePn10/kariuki/pkg/autocomplete
+cpu: AMD Ryzen 5 4600G with Radeon Graphics
+BenchmarkNewAutocomplete-12                        	  157549	      7211 ns/op	    9032 B/op	      79 allocs/op
+BenchmarkNewAutocomplete-12                        	  173512	      7136 ns/op	    9032 B/op	      79 allocs/op
+BenchmarkNewAutocomplete-12                        	  168974	      7164 ns/op	    9032 B/op	      79 allocs/op
+BenchmarkCollectAllCommands-12                     	  290030	      3954 ns/op	    5112 B/op	      15 allocs/op
+BenchmarkCollectAllCommands-12                     	  291948	      3985 ns/op	    5112 B/op	      15 allocs/op
+BenchmarkCollectAllCommands-12                     	  295978	      4011 ns/op	    5112 B/op	      15 allocs/op
+BenchmarkGetFuzzySuggestions_SmallInput-12         	    9086	    120113 ns/op	  102994 B/op	    2074 allocs/op
+BenchmarkGetFuzzySuggestions_SmallInput-12         	    8700	    121443 ns/op	  102994 B/op	    2074 allocs/op
+BenchmarkGetFuzzySuggestions_SmallInput-12         	    9253	    121253 ns/op	  102994 B/op	    2074 allocs/op
+BenchmarkGetFuzzySuggestions_MediumInput-12        	   10000	    114006 ns/op	  118642 B/op	    1348 allocs/op
+BenchmarkGetFuzzySuggestions_MediumInput-12        	   10000	    117826 ns/op	  118642 B/op	    1348 allocs/op
+BenchmarkGetFuzzySuggestions_MediumInput-12        	    9061	    114999 ns/op	  118642 B/op	    1348 allocs/op
+BenchmarkGetFuzzySuggestions_LongInput-12          	    6206	    189023 ns/op	  196187 B/op	    1705 allocs/op
+BenchmarkGetFuzzySuggestions_LongInput-12          	    6153	    187169 ns/op	  196187 B/op	    1705 allocs/op
+BenchmarkGetFuzzySuggestions_LongInput-12          	    6216	    188552 ns/op	  196187 B/op	    1705 allocs/op
+BenchmarkGetFuzzySuggestions_SmallCandidates-12    	   78849	     14630 ns/op	   11888 B/op	     261 allocs/op
+BenchmarkGetFuzzySuggestions_SmallCandidates-12    	   77644	     14925 ns/op	   11888 B/op	     261 allocs/op
+BenchmarkGetFuzzySuggestions_SmallCandidates-12    	   80118	     15008 ns/op	   11888 B/op	     261 allocs/op
+BenchmarkGetFuzzySuggestions_LargeCandidates-12    	     100	  12928417 ns/op	11487693 B/op	  202829 allocs/op
+BenchmarkGetFuzzySuggestions_LargeCandidates-12    	      91	  12951665 ns/op	11487701 B/op	  202829 allocs/op
+BenchmarkGetFuzzySuggestions_LargeCandidates-12    	      88	  12836269 ns/op	11487704 B/op	  202829 allocs/op
+BenchmarkAddToHistory-12                           	100000000	        10.11 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAddToHistory-12                           	121223068	        10.19 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAddToHistory-12                           	100000000	        10.02 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAddToHistory_FullBuffer-12                	15046256	        72.22 ns/op	      24 B/op	       1 allocs/op
+BenchmarkAddToHistory_FullBuffer-12                	16134591	        72.92 ns/op	      24 B/op	       1 allocs/op
+BenchmarkAddToHistory_FullBuffer-12                	15450117	        73.71 ns/op	      24 B/op	       1 allocs/op
+BenchmarkSuggestHistory-12                         	   14508	     80068 ns/op	   72977 B/op	     996 allocs/op
+BenchmarkSuggestHistory-12                         	   15193	     81943 ns/op	   72977 B/op	     996 allocs/op
+BenchmarkSuggestHistory-12                         	   14582	     81311 ns/op	   72977 B/op	     996 allocs/op
+BenchmarkListFiles-12                              	   79902	     14945 ns/op	    1291 B/op	      22 allocs/op
+BenchmarkListFiles-12                              	   80898	     14433 ns/op	    1290 B/op	      22 allocs/op
+BenchmarkListFiles-12                              	   83812	     14291 ns/op	    1290 B/op	      22 allocs/op
+2025/07/28 21:33:33 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk3740692666/001/test_history: no such file or directory
+BenchmarkSaveHistoryToDisk-12                      	2025/07/28 21:33:33 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk94220382/002/test_history: no such file or directory
+2025/07/28 21:33:33 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk321497255/003/test_history: no such file or directory
+2025/07/28 21:33:33 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk1775422638/004/test_history: no such file or directory
+  137823	      8652 ns/op	     616 B/op	       5 allocs/op
+BenchmarkSaveHistoryToDisk-12                      	2025/07/28 21:33:34 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk1308904744/001/test_history: no such file or directory
+2025/07/28 21:33:34 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk1586187508/002/test_history: no such file or directory
+2025/07/28 21:33:34 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk3823301188/003/test_history: no such file or directory
+2025/07/28 21:33:34 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk3437025684/004/test_history: no such file or directory
+  133222	      8747 ns/op	     616 B/op	       5 allocs/op
+BenchmarkSaveHistoryToDisk-12                      	2025/07/28 21:33:36 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk1578501135/001/test_history: no such file or directory
+2025/07/28 21:33:36 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk2737634322/002/test_history: no such file or directory
+2025/07/28 21:33:36 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk1014932868/003/test_history: no such file or directory
+2025/07/28 21:33:36 Nenhum arquivo de histórico encontrado: open /tmp/BenchmarkSaveHistoryToDisk2302802047/004/test_history: no such file or directory
+  136316	      8643 ns/op	     616 B/op	       5 allocs/op
+BenchmarkLoadHistoryFromDisk-12                    	  154789	      7705 ns/op	    3928 B/op	      14 allocs/op
+BenchmarkLoadHistoryFromDisk-12                    	  155116	      7677 ns/op	    3928 B/op	      14 allocs/op
+BenchmarkLoadHistoryFromDisk-12                    	  150375	      8037 ns/op	    3928 B/op	      14 allocs/op
+BenchmarkBuildCompleter-12                         	  544023	      2180 ns/op	    2016 B/op	      62 allocs/op
+BenchmarkBuildCompleter-12                         	  512157	      2180 ns/op	    2016 B/op	      62 allocs/op
+BenchmarkBuildCompleter-12                         	  556656	      2156 ns/op	    2016 B/op	      62 allocs/op
+BenchmarkCompleteFlow-12                           	    7399	    152920 ns/op	  131430 B/op	    2040 allocs/op
+BenchmarkCompleteFlow-12                           	    7156	    156209 ns/op	  131416 B/op	    2040 allocs/op
+BenchmarkCompleteFlow-12                           	    7448	    155688 ns/op	  131416 B/op	    2040 allocs/op
+BenchmarkMemory_NewAutocomplete-12                 	  122673	      9294 ns/op	   23624 B/op	      79 allocs/op
+BenchmarkMemory_NewAutocomplete-12                 	  125332	      9331 ns/op	   23624 B/op	      79 allocs/op
+BenchmarkMemory_NewAutocomplete-12                 	  130092	     10140 ns/op	   23624 B/op	      79 allocs/op
+BenchmarkMemory_FuzzySuggestions-12                	   10000	    118412 ns/op	  119682 B/op	    1408 allocs/op
+BenchmarkMemory_FuzzySuggestions-12                	    8692	    118562 ns/op	  119682 B/op	    1408 allocs/op
+BenchmarkMemory_FuzzySuggestions-12                	    9385	    117794 ns/op	  119682 B/op	    1408 allocs/op
+PASS
+ok  	github.com/FelipePn10/kariuki/pkg/autocomplete	65.321s

@@ -1,0 +1,31 @@
+goos: linux
+goarch: amd64
+pkg: github.com/FelipePn10/kariuki/pkg/autocomplete
+cpu: AMD Ryzen 5 4600G with Radeon Graphics
+BenchmarkGetFuzzySuggestions_SmallInput-12         	    8832	    125202 ns/op	  102995 B/op	    2074 allocs/op
+BenchmarkGetFuzzySuggestions_SmallInput-12         	    8149	    123237 ns/op	  102994 B/op	    2074 allocs/op
+BenchmarkGetFuzzySuggestions_SmallInput-12         	    8169	    127376 ns/op	  102994 B/op	    2074 allocs/op
+BenchmarkGetFuzzySuggestions_SmallInput-12         	    9691	    123962 ns/op	  102994 B/op	    2074 allocs/op
+BenchmarkGetFuzzySuggestions_SmallInput-12         	    9007	    122749 ns/op	  102994 B/op	    2074 allocs/op
+BenchmarkGetFuzzySuggestions_MediumInput-12        	    9714	    113880 ns/op	  118642 B/op	    1348 allocs/op
+BenchmarkGetFuzzySuggestions_MediumInput-12        	   10000	    116744 ns/op	  118642 B/op	    1348 allocs/op
+BenchmarkGetFuzzySuggestions_MediumInput-12        	    9210	    115886 ns/op	  118642 B/op	    1348 allocs/op
+BenchmarkGetFuzzySuggestions_MediumInput-12        	    9398	    117591 ns/op	  118642 B/op	    1348 allocs/op
+BenchmarkGetFuzzySuggestions_MediumInput-12        	    9478	    118807 ns/op	  118642 B/op	    1348 allocs/op
+BenchmarkGetFuzzySuggestions_LongInput-12          	    5782	    189192 ns/op	  196187 B/op	    1705 allocs/op
+BenchmarkGetFuzzySuggestions_LongInput-12          	    6398	    187694 ns/op	  196187 B/op	    1705 allocs/op
+BenchmarkGetFuzzySuggestions_LongInput-12          	    6175	    185328 ns/op	  196187 B/op	    1705 allocs/op
+BenchmarkGetFuzzySuggestions_LongInput-12          	    6552	    194418 ns/op	  196187 B/op	    1705 allocs/op
+BenchmarkGetFuzzySuggestions_LongInput-12          	    6867	    183802 ns/op	  196187 B/op	    1705 allocs/op
+BenchmarkGetFuzzySuggestions_SmallCandidates-12    	   80515	     14948 ns/op	   11888 B/op	     261 allocs/op
+BenchmarkGetFuzzySuggestions_SmallCandidates-12    	   79432	     15301 ns/op	   11888 B/op	     261 allocs/op
+BenchmarkGetFuzzySuggestions_SmallCandidates-12    	   79710	     14671 ns/op	   11888 B/op	     261 allocs/op
+BenchmarkGetFuzzySuggestions_SmallCandidates-12    	   80638	     15062 ns/op	   11888 B/op	     261 allocs/op
+BenchmarkGetFuzzySuggestions_SmallCandidates-12    	   79098	     14960 ns/op	   11888 B/op	     261 allocs/op
+BenchmarkGetFuzzySuggestions_LargeCandidates-12    	      91	  12988549 ns/op	11487698 B/op	  202829 allocs/op
+BenchmarkGetFuzzySuggestions_LargeCandidates-12    	      96	  12864385 ns/op	11487702 B/op	  202829 allocs/op
+BenchmarkGetFuzzySuggestions_LargeCandidates-12    	      91	  12757197 ns/op	11487693 B/op	  202829 allocs/op
+BenchmarkGetFuzzySuggestions_LargeCandidates-12    	     100	  12537493 ns/op	11487699 B/op	  202829 allocs/op
+BenchmarkGetFuzzySuggestions_LargeCandidates-12    	      97	  12887669 ns/op	11487714 B/op	  202829 allocs/op
+PASS
+ok  	github.com/FelipePn10/kariuki/pkg/autocomplete	31.160s

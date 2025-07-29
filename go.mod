@@ -11,14 +11,15 @@ require (
 	github.com/stretchr/testify v1.10.0
 )
 
-require github.com/chzyer/readline v1.5.1
+require (
+	github.com/chzyer/readline v1.5.1
+	github.com/paul-mannino/go-fuzzywuzzy v0.0.0-20241117160931-a1769aeb6b21
+)
 
 require (
 	fyne.io/systray v1.11.0 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
-	github.com/JoaoDanielRufino/go-input-autocomplete v1.1.0
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203 // indirect
 	github.com/fredbi/uri v1.1.0 // indirect
 	github.com/fyne-io/gl-js v0.1.0 // indirect
 	github.com/fyne-io/glfw-js v0.2.0 // indirect
