@@ -5,7 +5,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	fuzzy "github.com/paul-mannino/go-fuzzywuzzy"
 
 	"github.com/FelipePn10/kariuki/cmd/terminal"
 	"github.com/chzyer/readline"
@@ -17,8 +20,9 @@ type AutoComplete struct {
 	historyPath    string
 	startIndex     int
 	size           int
-	config         *terminal.TerminalConfig // Terminal configuration
+	config         *terminal.TerminalConfig
 	maxHistorySize int
+	allCommands    []string
 }
 
 func NewAutocomplete(config *terminal.TerminalConfig) *AutoComplete {
@@ -31,18 +35,55 @@ func NewAutocomplete(config *terminal.TerminalConfig) *AutoComplete {
 		size:           0,
 	}
 	a.loadHistoryFromDisk()
+	a.allCommands = a.collectAllCommands()
 	a.completer = a.buildCompleter()
 	return a
 }
 
-// Builds the autocompletion tree for readline.
+func (a *AutoComplete) collectAllCommands() []string {
+	// Coletar todos os nomes de comandos
+	var commands []string
+	// Comandos predefinidos
+	hardcoded := []string{
+		"mode", "login", "say", "hello", "bye", "setprompt",
+		"clear", "exit", "setpassword", "help", "go", "sleep",
+	}
+	commands = append(commands, hardcoded...)
+	// Adicionar comandos permitidos da configuração
+	if a.config != nil {
+		commands = append(commands, a.config.AllowedCommands...)
+	}
+	// Remover duplicatas
+	uniqueCommands := make(map[string]struct{})
+	for _, cmd := range commands {
+		uniqueCommands[cmd] = struct{}{}
+	}
+	var allCommands []string
+	for cmd := range uniqueCommands {
+		allCommands = append(allCommands, cmd)
+	}
+	return allCommands
+}
+
 func (a *AutoComplete) buildCompleter() *readline.PrefixCompleter {
-	items := []readline.PrefixCompleterInterface{
+	return readline.NewPrefixCompleter(
+		readline.PcItemDynamic(func(line string) []string {
+			// Obter sugestões fuzzy de comandos e histórico
+			commandSuggestions := getFuzzySuggestions(line, a.allCommands, 5)
+			historySuggestions := getFuzzySuggestions(line, a.history, 5)
+			// Combinar sugestões
+			suggestions := append(commandSuggestions, historySuggestions...)
+			// Limitar a 10 sugestões
+			if len(suggestions) > 10 {
+				suggestions = suggestions[:10]
+			}
+			return suggestions
+		}),
+		// Manter sub-comandos específicos, se necessário
 		readline.PcItem("mode",
 			readline.PcItem("vi"),
 			readline.PcItem("emacs"),
 		),
-		readline.PcItem("login"),
 		readline.PcItem("say",
 			readline.PcItemDynamic(a.listFiles("./"),
 				readline.PcItem("with",
@@ -51,13 +92,6 @@ func (a *AutoComplete) buildCompleter() *readline.PrefixCompleter {
 				),
 			),
 		),
-		readline.PcItem("hello"),
-		readline.PcItem("bye"),
-		readline.PcItem("setprompt"),
-		readline.PcItem("clear"),
-		readline.PcItem("exit"),
-		readline.PcItem("setpassword"),
-		readline.PcItem("help"),
 		readline.PcItem("go",
 			readline.PcItem("build",
 				readline.PcItem("-o"),
@@ -70,31 +104,28 @@ func (a *AutoComplete) buildCompleter() *readline.PrefixCompleter {
 			),
 			readline.PcItem("test"),
 		),
-		readline.PcItem("sleep"),
+	)
+}
+
+func getFuzzySuggestions(input string, candidates []string, limit int) []string {
+	if len(candidates) == 0 || input == "" {
+		return []string{}
 	}
-
-	// dynamic history suggestions
-	items = append(items, readline.PcItemDynamic(func(line string) []string {
-		suggestions := make([]string, 0)
-		lineLower := strings.ToLower(line)
-		for _, cmd := range a.history {
-			if strings.HasPrefix(strings.ToLower(cmd), lineLower) {
-				suggestions = append(suggestions, cmd)
-			}
-		}
-		return suggestions
-	}))
-
-	// Add allowed commands from terminal configuration, if available.
-	if a.config != nil && len(a.config.AllowedCommands) > 0 {
-		for _, cmd := range a.config.AllowedCommands {
-			if !containsCommand(items, cmd) {
-				items = append(items, readline.PcItem(cmd))
-			}
-		}
+	results, err := fuzzy.Extract(input, candidates, limit)
+	if err != nil {
+		// Handle error, e.g., log it or return an empty list
+		return []string{}
 	}
-
-	return readline.NewPrefixCompleter(items...)
+	// Ordenar por pontuação (maior para menor)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+	// Extrair as correspondências
+	suggestions := make([]string, len(results))
+	for i, r := range results {
+		suggestions[i] = r.Match
+	}
+	return suggestions
 }
 
 func containsCommand(items []readline.PrefixCompleterInterface, cmd string) bool {
@@ -108,7 +139,6 @@ func containsCommand(items []readline.PrefixCompleterInterface, cmd string) bool
 	return false
 }
 
-// List files in a directory
 func (a *AutoComplete) listFiles(path string) func(string) []string {
 	return func(line string) []string {
 		resolvedPath := path
@@ -117,10 +147,10 @@ func (a *AutoComplete) listFiles(path string) func(string) []string {
 				resolvedPath = filepath.Join(cwd, path)
 			}
 		}
-		names := make([]string, 0) // Array to store file names
+		names := make([]string, 0)
 		files, err := os.ReadDir(resolvedPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading directory %s: %v\n", resolvedPath, err)
+			fmt.Fprintf(os.Stderr, "Erro ao ler diretório %s: %v\n", resolvedPath, err)
 			return names
 		}
 
@@ -141,7 +171,7 @@ func (a *AutoComplete) AddToHistory(command string) {
 		return
 	}
 
-	// avoid saving consecutive duplicate commands in history
+	// Evitar salvar comandos duplicados consecutivos
 	if a.size > 0 {
 		lastIndex := (a.startIndex + a.size - 1) % len(a.history)
 		if a.history[lastIndex] == command {
@@ -171,7 +201,7 @@ func (a *AutoComplete) SaveHistoryToDisk() error {
 	content := strings.Join(orderedHistory, "\n")
 	err := os.WriteFile(a.historyPath, []byte(content), 0644)
 	if err != nil {
-		log.Printf("Failed to save history to %s: %v", a.historyPath, err)
+		log.Printf("Falha ao salvar histórico em %s: %v", a.historyPath, err)
 	}
 	return err
 }
@@ -181,14 +211,12 @@ func (a *AutoComplete) loadHistoryFromDisk() {
 		return
 	}
 
-	// data in bytes
 	data, err := os.ReadFile(a.historyPath)
 	if err != nil {
-		log.Printf("No existing history file found: %v", err)
+		log.Printf("Nenhum arquivo de histórico encontrado: %v", err)
 		return
 	}
 
-	// data in bytes -> data in strings
 	lines := strings.Split(string(data), "\n")
 	var history []string
 	for _, line := range lines {
@@ -197,7 +225,6 @@ func (a *AutoComplete) loadHistoryFromDisk() {
 			history = append(history, trimmed)
 		}
 	}
-	// Take the last a.maxHistorySize commands
 	if len(history) > a.maxHistorySize {
 		history = history[len(history)-a.maxHistorySize:]
 	}
@@ -207,56 +234,5 @@ func (a *AutoComplete) loadHistoryFromDisk() {
 }
 
 func (a *AutoComplete) SuggestHistory(input string) []string {
-	suggestions := make([]string, 0)
-	input = strings.ToLower(strings.TrimSpace(input))
-	if input == "" {
-		return suggestions
-	}
-
-	for _, cmd := range a.history {
-		if strings.HasPrefix(strings.ToLower(cmd), input) {
-			suggestions = append(suggestions, cmd)
-		}
-	}
-	return suggestions
+	return getFuzzySuggestions(input, a.history, 10)
 }
-
-// func (a *AutoComplete) Input(prompt string) (string, error) {
-// 	rl, err := readline.NewEx(&readline.Config{
-// 		Prompt:              prompt,
-// 		AutoComplete:        a.completer,
-// 		HistoryFile:         a.config.HistoryFile,
-// 		InterruptPrompt:     "^C",
-// 		EOFPrompt:           "exit",
-// 		HistorySearchFold:   true,
-// 		FuncFilterInputRune: nil,
-// 	})
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to initialize readline: %w", err)
-// 	}
-// 	defer rl.Close()
-
-// 	line, err := rl.Readline()
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	a.AddToHistory(line)
-// 	return line, nil
-// }
-
-// func FallbackInput(prompt string) (string, error) {
-// 	path, err := input_autocomplete.Read(prompt)
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to read path entry: %w", err)
-// 	}
-// 	return path, nil
-// }
-
-// func InputAutocomplete() {
-// 	path, err := input_autocomplete.Read("Path: ")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	fmt.Println(path)
-// }
