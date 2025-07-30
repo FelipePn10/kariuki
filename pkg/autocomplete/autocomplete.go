@@ -41,19 +41,18 @@ func NewAutocomplete(config *terminal.TerminalConfig) *AutoComplete {
 }
 
 func (a *AutoComplete) collectAllCommands() []string {
-	// Coletar todos os nomes de comandos
 	var commands []string
-	// Comandos predefinidos
+
 	hardcoded := []string{
 		"mode", "login", "say", "hello", "bye", "setprompt",
 		"clear", "exit", "setpassword", "help", "go", "sleep",
 	}
 	commands = append(commands, hardcoded...)
-	// Adicionar comandos permitidos da configuração
+
 	if a.config != nil {
 		commands = append(commands, a.config.AllowedCommands...)
 	}
-	// Remover duplicatas
+	// Remove duplicates
 	uniqueCommands := make(map[string]struct{})
 	for _, cmd := range commands {
 		uniqueCommands[cmd] = struct{}{}
@@ -68,18 +67,15 @@ func (a *AutoComplete) collectAllCommands() []string {
 func (a *AutoComplete) buildCompleter() *readline.PrefixCompleter {
 	return readline.NewPrefixCompleter(
 		readline.PcItemDynamic(func(line string) []string {
-			// Obter sugestões fuzzy de comandos e histórico
 			commandSuggestions := getFuzzySuggestions(line, a.allCommands, 5)
 			historySuggestions := getFuzzySuggestions(line, a.history, 5)
-			// Combinar sugestões
 			suggestions := append(commandSuggestions, historySuggestions...)
-			// Limitar a 10 sugestões
 			if len(suggestions) > 10 {
 				suggestions = suggestions[:10]
 			}
 			return suggestions
 		}),
-		// Manter sub-comandos específicos, se necessário
+		// Keep specific sub-commands if necessary
 		readline.PcItem("mode",
 			readline.PcItem("vi"),
 			readline.PcItem("emacs"),
@@ -116,11 +112,11 @@ func getFuzzySuggestions(input string, candidates []string, limit int) []string 
 		// Handle error, e.g., log it or return an empty list
 		return []string{}
 	}
-	// Ordenar por pontuação (maior para menor)
+	// Sort by score (highest to lowest)
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
-	// Extrair as correspondências
+	// Extract matches
 	suggestions := make([]string, len(results))
 	for i, r := range results {
 		suggestions[i] = r.Match

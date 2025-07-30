@@ -1,2 +1,0 @@
-PASS
-ok  	github.com/FelipePn10/kariuki/pkg/autocomplete	0.004s

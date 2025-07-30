@@ -1,7 +1,0 @@
-goos: linux
-goarch: amd64
-pkg: github.com/FelipePn10/kariuki/pkg/autocomplete
-cpu: AMD Ryzen 5 4600G with Radeon Graphics
-BenchmarkCompleteFlow-12    	    6921	    169550 ns/op	  131413 B/op	    2040 allocs/op
-PASS
-ok  	github.com/FelipePn10/kariuki/pkg/autocomplete	1.310s
