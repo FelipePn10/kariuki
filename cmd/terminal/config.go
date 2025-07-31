@@ -30,6 +30,7 @@ type TerminalConfig struct {
 	TypeAhead       bool          `mapstructure:"type_ahead"`
 	AutoSuggest     bool          `mapstructure:"auto_suggest"`
 	InactivityClose time.Duration `mapstructure:"inactivity_close"`
+	LRUCacheSize    int           `mapstructure:"lru_cache_size"`
 
 	// Section: Security and Access
 	MaxSessionTime  time.Duration `mapstructure:"max_session_time"`
