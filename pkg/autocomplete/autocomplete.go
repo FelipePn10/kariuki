@@ -1,15 +1,64 @@
 package autocomplete
 
 import (
+	"compress/gzip"
+	"container/list"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/FelipePn10/kariuki/cmd/terminal"
 	"github.com/chzyer/readline"
+	"github.com/sahilm/fuzzy"
 )
+
+type LRUCache struct {
+	capacity int
+	cache    map[string]*list.Element
+	list     *list.List
+}
+
+func NewLRUCache(capacity int) *LRUCache {
+	return &LRUCache{
+		capacity: capacity,
+		cache:    make(map[string]*list.Element),
+		list:     list.New(),
+	}
+}
+
+func (c *LRUCache) Put(command string) {
+	if elem, ok := c.cache[command]; ok {
+		c.list.MoveToFront(elem)
+		return
+	}
+	if c.list.Len() >= c.capacity {
+		back := c.list.Back()
+		if back != nil {
+			delete(c.cache, back.Value.(string))
+			c.list.Remove(back)
+		}
+	}
+	elem := c.list.PushFront(command)
+	c.cache[command] = elem
+}
+
+func (c *LRUCache) GetSuggestions(input string, limit int) []string {
+	var suggestions []string
+	count := 0
+	for elem := c.list.Front(); elem != nil && count < limit; elem = elem.Next() {
+		cmd := elem.Value.(string)
+		if strings.Contains(strings.ToLower(cmd), strings.ToLower(input)) {
+			suggestions = append(suggestions, cmd)
+			count++
+		}
+	}
+	return suggestions
+}
 
 type AutoComplete struct {
 	completer      *readline.PrefixCompleter
@@ -17,11 +66,17 @@ type AutoComplete struct {
 	historyPath    string
 	startIndex     int
 	size           int
-	config         *terminal.TerminalConfig // Terminal configuration
+	config         *terminal.TerminalConfig
 	maxHistorySize int
+	allCommands    []string
+	lruCache       *LRUCache
 }
 
 func NewAutocomplete(config *terminal.TerminalConfig) *AutoComplete {
+	lruCacheSize := 100
+	if config.LRUCacheSize > 0 {
+		lruCacheSize = config.LRUCacheSize
+	}
 	a := &AutoComplete{
 		config:         config,
 		historyPath:    config.HistoryFile,
@@ -29,20 +84,116 @@ func NewAutocomplete(config *terminal.TerminalConfig) *AutoComplete {
 		maxHistorySize: config.HistorySize,
 		startIndex:     0,
 		size:           0,
+		lruCache:       NewLRUCache(lruCacheSize),
 	}
 	a.loadHistoryFromDisk()
+	a.allCommands = a.collectAllCommands()
 	a.completer = a.buildCompleter()
 	return a
 }
 
-// Builds the autocompletion tree for readline.
+func (a *AutoComplete) collectAllCommands() []string {
+	var commands []string
+	hardcoded := []string{
+		"mode", "login", "say", "hello", "bye", "setprompt",
+		"clear", "exit", "setpassword", "help", "go", "sleep",
+	}
+	commands = append(commands, hardcoded...)
+	if a.config != nil {
+		commands = append(commands, a.config.AllowedCommands...)
+	}
+	uniqueCommands := make(map[string]struct{})
+	for _, cmd := range commands {
+		uniqueCommands[cmd] = struct{}{}
+	}
+	var allCommands []string
+	for cmd := range uniqueCommands {
+		allCommands = append(allCommands, cmd)
+	}
+	return allCommands
+}
+
 func (a *AutoComplete) buildCompleter() *readline.PrefixCompleter {
-	items := []readline.PrefixCompleterInterface{
+	return readline.NewPrefixCompleter(
+		readline.PcItemDynamic(func(line string) []string {
+			start := time.Now()
+			defer func() {
+				log.Printf("Autocomplete took %v", time.Since(start))
+			}()
+
+			// Pre-filtering with LRU
+			lruSuggestions := a.lruCache.GetSuggestions(line, 5)
+			remainingLimit := 15
+			candidates := append([]string{}, a.allCommands...)
+			candidates = append(candidates, a.history...)
+			for _, cmd := range lruSuggestions {
+				for i, c := range candidates {
+					if c == cmd {
+						candidates = append(candidates[:i], candidates[i+1:]...)
+						break
+					}
+				}
+			}
+
+			// fuzzy
+			matches := fuzzy.Find(line, candidates)
+			var suggestions []string
+			for _, match := range matches {
+				if len(suggestions) >= remainingLimit {
+					break
+				}
+				suggestions = append(suggestions, match.Str)
+			}
+			suggestions = append(lruSuggestions, suggestions...)
+			if len(suggestions) > 10 {
+				suggestions = suggestions[:10]
+			}
+
+			scoredSuggestions := make([]struct {
+				cmd   string
+				score int
+			}, len(suggestions))
+			for i, cmd := range suggestions {
+				scoredSuggestions[i] = struct {
+					cmd   string
+					score int
+				}{cmd: cmd, score: 0}
+				if elem, ok := a.lruCache.cache[cmd]; ok {
+					position := 0
+					for e := a.lruCache.list.Front(); e != nil; e = e.Next() {
+						if e == elem {
+							break
+						}
+						position++
+					}
+					C := a.lruCache.list.Len()
+					if C > 0 {
+						recencyScore := float64(C-position) / float64(C)
+						scoredSuggestions[i].score += int(20.0 * recencyScore)
+					}
+				}
+				for _, match := range matches {
+					if match.Str == cmd {
+						scoredSuggestions[i].score += match.Score
+						break
+					}
+				}
+			}
+
+			sort.Slice(scoredSuggestions, func(i, j int) bool {
+				return scoredSuggestions[i].score > scoredSuggestions[j].score
+			})
+
+			finalSuggestions := make([]string, 0, len(scoredSuggestions))
+			for _, s := range scoredSuggestions {
+				finalSuggestions = append(finalSuggestions, s.cmd)
+			}
+			return finalSuggestions
+		}),
 		readline.PcItem("mode",
 			readline.PcItem("vi"),
 			readline.PcItem("emacs"),
 		),
-		readline.PcItem("login"),
 		readline.PcItem("say",
 			readline.PcItemDynamic(a.listFiles("./"),
 				readline.PcItem("with",
@@ -51,13 +202,6 @@ func (a *AutoComplete) buildCompleter() *readline.PrefixCompleter {
 				),
 			),
 		),
-		readline.PcItem("hello"),
-		readline.PcItem("bye"),
-		readline.PcItem("setprompt"),
-		readline.PcItem("clear"),
-		readline.PcItem("exit"),
-		readline.PcItem("setpassword"),
-		readline.PcItem("help"),
 		readline.PcItem("go",
 			readline.PcItem("build",
 				readline.PcItem("-o"),
@@ -70,31 +214,7 @@ func (a *AutoComplete) buildCompleter() *readline.PrefixCompleter {
 			),
 			readline.PcItem("test"),
 		),
-		readline.PcItem("sleep"),
-	}
-
-	// dynamic history suggestions
-	items = append(items, readline.PcItemDynamic(func(line string) []string {
-		suggestions := make([]string, 0)
-		lineLower := strings.ToLower(line)
-		for _, cmd := range a.history {
-			if strings.HasPrefix(strings.ToLower(cmd), lineLower) {
-				suggestions = append(suggestions, cmd)
-			}
-		}
-		return suggestions
-	}))
-
-	// Add allowed commands from terminal configuration, if available.
-	if a.config != nil && len(a.config.AllowedCommands) > 0 {
-		for _, cmd := range a.config.AllowedCommands {
-			if !containsCommand(items, cmd) {
-				items = append(items, readline.PcItem(cmd))
-			}
-		}
-	}
-
-	return readline.NewPrefixCompleter(items...)
+	)
 }
 
 func containsCommand(items []readline.PrefixCompleterInterface, cmd string) bool {
@@ -108,7 +228,6 @@ func containsCommand(items []readline.PrefixCompleterInterface, cmd string) bool
 	return false
 }
 
-// List files in a directory
 func (a *AutoComplete) listFiles(path string) func(string) []string {
 	return func(line string) []string {
 		resolvedPath := path
@@ -117,13 +236,12 @@ func (a *AutoComplete) listFiles(path string) func(string) []string {
 				resolvedPath = filepath.Join(cwd, path)
 			}
 		}
-		names := make([]string, 0) // Array to store file names
+		names := make([]string, 0)
 		files, err := os.ReadDir(resolvedPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading directory %s: %v\n", resolvedPath, err)
+			fmt.Fprintf(os.Stderr, "Erro ao ler diretório %s: %v\n", resolvedPath, err)
 			return names
 		}
-
 		for _, f := range files {
 			name := f.Name()
 			if f.IsDir() {
@@ -140,15 +258,12 @@ func (a *AutoComplete) AddToHistory(command string) {
 	if command == "" {
 		return
 	}
-
-	// avoid saving consecutive duplicate commands in history
 	if a.size > 0 {
 		lastIndex := (a.startIndex + a.size - 1) % len(a.history)
 		if a.history[lastIndex] == command {
 			return
 		}
 	}
-
 	if a.size < a.maxHistorySize {
 		a.history = append(a.history, command)
 		a.size++
@@ -156,22 +271,45 @@ func (a *AutoComplete) AddToHistory(command string) {
 		a.history[a.startIndex] = command
 		a.startIndex = (a.startIndex + 1) % a.maxHistorySize
 	}
+	a.lruCache.Put(command)
 }
 
 func (a *AutoComplete) loadHistoryFromDisk() {
 	if a.historyPath == "" {
 		return
 	}
-
-	// data in bytes
-	data, err := os.ReadFile(a.historyPath)
+	file, err := os.Open(a.historyPath)
 	if err != nil {
-		log.Printf("No existing history file found: %v", err)
+		log.Printf("No history file found: %v", err)
 		return
 	}
+	defer file.Close()
 
-	// data in bytes -> data in strings
-	lines := strings.Split(string(data), "\n")
+	// Try to create a gzip reader
+	gz, err := gzip.NewReader(file)
+	if err != nil {
+		// If it's not a gzip file, try reading it as plain text
+		file.Seek(0, 0) // Reset file pointer
+		data, err := io.ReadAll(file)
+		if err != nil {
+			log.Printf("Failed to read history file: %v", err)
+			return
+		}
+		a.parseHistory(string(data))
+		return
+	}
+	defer gz.Close()
+
+	data, err := io.ReadAll(gz)
+	if err != nil {
+		log.Printf("Failed to read gzip history file: %v", err)
+		return
+	}
+	a.parseHistory(string(data))
+}
+
+func (a *AutoComplete) parseHistory(content string) {
+	lines := strings.Split(content, "\n")
 	var history []string
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -179,7 +317,6 @@ func (a *AutoComplete) loadHistoryFromDisk() {
 			history = append(history, trimmed)
 		}
 	}
-	// Take the last a.maxHistorySize commands
 	if len(history) > a.maxHistorySize {
 		history = history[len(history)-a.maxHistorySize:]
 	}
@@ -188,57 +325,50 @@ func (a *AutoComplete) loadHistoryFromDisk() {
 	a.startIndex = 0
 }
 
-func (a *AutoComplete) SuggestHistory(input string) []string {
-	suggestions := make([]string, 0)
-	input = strings.ToLower(strings.TrimSpace(input))
-	if input == "" {
-		return suggestions
+func (a *AutoComplete) SaveHistoryToDisk() error {
+	if a.historyPath == "" {
+		return nil
 	}
+	file, err := os.Create(a.historyPath)
+	if err != nil {
+		log.Printf("Failed to create history file: %v", err)
+		return err
+	}
+	defer file.Close()
 
-	for _, cmd := range a.history {
-		if strings.HasPrefix(strings.ToLower(cmd), input) {
-			suggestions = append(suggestions, cmd)
+	gz := gzip.NewWriter(file)
+	defer gz.Close()
+
+	var orderedHistory []string
+	if a.size < a.maxHistorySize {
+		orderedHistory = a.history
+	} else {
+		orderedHistory = append(a.history[a.startIndex:], a.history[0:a.startIndex]...)
+	}
+	content := strings.Join(orderedHistory, "\n")
+	_, err = gz.Write([]byte(content))
+	if err != nil {
+		log.Printf("Failed to write history file: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (a *AutoComplete) SuggestHistory(input string) []string {
+	if input == "" {
+		return []string{}
+	}
+	if a.history == nil {
+		a.loadHistoryFromDisk()
+	}
+	matches := fuzzy.Find(input, a.history)
+	// The slice size will be the same as matches, but it is still empty.
+	suggestions := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(suggestions) >= 10 {
+			break
 		}
+		suggestions = append(suggestions, match.Str)
 	}
 	return suggestions
 }
-
-// func (a *AutoComplete) Input(prompt string) (string, error) {
-// 	rl, err := readline.NewEx(&readline.Config{
-// 		Prompt:              prompt,
-// 		AutoComplete:        a.completer,
-// 		HistoryFile:         a.config.HistoryFile,
-// 		InterruptPrompt:     "^C",
-// 		EOFPrompt:           "exit",
-// 		HistorySearchFold:   true,
-// 		FuncFilterInputRune: nil,
-// 	})
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to initialize readline: %w", err)
-// 	}
-// 	defer rl.Close()
-
-// 	line, err := rl.Readline()
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	a.AddToHistory(line)
-// 	return line, nil
-// }
-
-// func FallbackInput(prompt string) (string, error) {
-// 	path, err := input_autocomplete.Read(prompt)
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to read path entry: %w", err)
-// 	}
-// 	return path, nil
-// }
-
-// func InputAutocomplete() {
-// 	path, err := input_autocomplete.Read("Path: ")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	fmt.Println(path)
-// }

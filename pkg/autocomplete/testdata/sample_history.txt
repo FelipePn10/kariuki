@@ -1,0 +1,60 @@
+go build main.go
+go test ./...
+go run cmd/main.go
+git add .
+git commit -m "initial commit"
+git push origin main
+docker build -t myapp .
+docker run -p 8080:8080 myapp
+kubectl apply -f deployment.yaml
+kubectl get pods
+helm install myapp ./chart
+terraform init
+terraform plan
+terraform apply
+ansible-playbook playbook.yml
+make build
+make test
+make deploy
+npm install
+npm run build
+npm run test
+yarn install
+yarn build
+python -m pip install -r requirements.txt
+python manage.py runserver
+python main.py
+java -jar app.jar
+mvn clean install
+gradle build
+cargo build
+cargo run
+rustc main.rs
+gcc -o main main.c
+./main
+ls -la
+cd /home/user
+mkdir project
+rm -rf temp
+cp file.txt backup/
+mv old.txt new.txt
+find . -name "*.go"
+grep -r "TODO" .
+sed 's/old/new/g' file.txt
+awk '{print $1}' data.txt
+sort file.txt
+uniq file.txt
+head -n 10 file.txt
+tail -f log.txt
+cat /etc/hosts
+vim config.yml
+nano settings.conf
+htop
+ps aux
+kill -9 1234
+systemctl restart nginx
+service apache2 start
+crontab -e
+ssh user@server
+scp file.txt user@server:/path/
+rsync -av local/ remote/
