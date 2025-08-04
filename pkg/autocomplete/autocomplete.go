@@ -1,8 +1,10 @@
 package autocomplete
 
 import (
+	"compress/gzip"
 	"container/list"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -272,34 +274,42 @@ func (a *AutoComplete) AddToHistory(command string) {
 	a.lruCache.Put(command)
 }
 
-func (a *AutoComplete) SaveHistoryToDisk() error {
-	if a.historyPath == "" {
-		return nil
-	}
-	var orderedHistory []string
-	if a.size < a.maxHistorySize {
-		orderedHistory = a.history
-	} else {
-		orderedHistory = append(a.history[a.startIndex:], a.history[0:a.startIndex]...)
-	}
-	content := strings.Join(orderedHistory, "\n")
-	err := os.WriteFile(a.historyPath, []byte(content), 0644)
-	if err != nil {
-		log.Printf("Falha ao salvar histórico em %s: %v", a.historyPath, err)
-	}
-	return err
-}
-
 func (a *AutoComplete) loadHistoryFromDisk() {
 	if a.historyPath == "" {
 		return
 	}
-	data, err := os.ReadFile(a.historyPath)
+	file, err := os.Open(a.historyPath)
 	if err != nil {
-		log.Printf("Nenhum arquivo de histórico encontrado: %v", err)
+		log.Printf("No history file found: %v", err)
 		return
 	}
-	lines := strings.Split(string(data), "\n")
+	defer file.Close()
+
+	// Try to create a gzip reader
+	gz, err := gzip.NewReader(file)
+	if err != nil {
+		// If it's not a gzip file, try reading it as plain text
+		file.Seek(0, 0) // Reset file pointer
+		data, err := io.ReadAll(file)
+		if err != nil {
+			log.Printf("Failed to read history file: %v", err)
+			return
+		}
+		a.parseHistory(string(data))
+		return
+	}
+	defer gz.Close()
+
+	data, err := io.ReadAll(gz)
+	if err != nil {
+		log.Printf("Failed to read gzip history file: %v", err)
+		return
+	}
+	a.parseHistory(string(data))
+}
+
+func (a *AutoComplete) parseHistory(content string) {
+	lines := strings.Split(content, "\n")
 	var history []string
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -313,6 +323,35 @@ func (a *AutoComplete) loadHistoryFromDisk() {
 	a.history = history
 	a.size = len(history)
 	a.startIndex = 0
+}
+
+func (a *AutoComplete) SaveHistoryToDisk() error {
+	if a.historyPath == "" {
+		return nil
+	}
+	file, err := os.Create(a.historyPath)
+	if err != nil {
+		log.Printf("Failed to create history file: %v", err)
+		return err
+	}
+	defer file.Close()
+
+	gz := gzip.NewWriter(file)
+	defer gz.Close()
+
+	var orderedHistory []string
+	if a.size < a.maxHistorySize {
+		orderedHistory = a.history
+	} else {
+		orderedHistory = append(a.history[a.startIndex:], a.history[0:a.startIndex]...)
+	}
+	content := strings.Join(orderedHistory, "\n")
+	_, err = gz.Write([]byte(content))
+	if err != nil {
+		log.Printf("Failed to write history file: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (a *AutoComplete) SuggestHistory(input string) []string {
